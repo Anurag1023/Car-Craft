@@ -1,0 +1,469 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  DEALER
+  CUSTOMER
+  SERVICE_MANAGER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  MAINTENANCE
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  ELECTRIC
+  HYBRID
+  CNG
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+}
+
+enum BodyType {
+  SEDAN
+  SUV
+  HATCHBACK
+  COUPE
+  TRUCK
+  MPV
+}
+
+enum InquiryStatus {
+  PENDING
+  CONTACTED
+  RESOLVED
+  CLOSED
+}
+
+enum ProductStatus {
+  ACTIVE
+  OUT_OF_STOCK
+  DISCONTINUED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  COD
+}
+
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum ReviewTargetType {
+  DEALERSHIP
+  PRODUCT
+  SERVICE
+}
+
+model User {
+  id            String      @id @default(uuid())
+  name          String
+  email         String      @unique
+  password      String
+  role          Role        @default(CUSTOMER)
+  phone         String?
+  avatar        String?
+  status        UserStatus  @default(ACTIVE)
+  dealershipId  String?     // Associated dealership for DEALER and SERVICE_MANAGER
+  dealership    Dealership? @relation("DealershipStaff", fields: [dealershipId], references: [id], onDelete: SetNull)
+  
+  // Relations
+  managedDealerships Dealership[]          @relation("AssignedDealer")
+  wishlistItems      WishlistItem[]
+  cart               Cart?
+  orders             Order[]
+  appointments       ServiceAppointment[]  @relation("CustomerAppointments")
+  assignedServices   ServiceAppointment[]  @relation("ServiceManagerAssignments")
+  reviews            Review[]
+  inquiries          VehicleInquiry[]
+  activityLogs       ActivityLog[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([email])
+  @@index([role])
+}
+
+model Dealership {
+  id              String      @id @default(uuid())
+  name            String
+  slug            String      @unique
+  logo            String?
+  description     String?     @db.Text
+  address         String
+  city            String
+  state           String
+  contactNumber   String
+  email           String
+  operatingHours  String      @default("9:00 AM - 7:00 PM")
+  status          String      @default("ACTIVE") // ACTIVE, INACTIVE
+  
+  assignedDealerId String?
+  assignedDealer  User?       @relation("AssignedDealer", fields: [assignedDealerId], references: [id], onDelete: SetNull)
+  staff           User[]      @relation("DealershipStaff")
+  
+  vehicles        Vehicle[]
+  appointments    ServiceAppointment[]
+  serviceSlots    ServiceSlot[]
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([city])
+  @@index([slug])
+}
+
+model Vehicle {
+  id                 String          @id @default(uuid())
+  dealershipId       String
+  dealership         Dealership      @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  
+  brand              String
+  model              String
+  variant            String?
+  year               Int
+  price              Float
+  fuelType           FuelType        @default(PETROL)
+  transmission       Transmission    @default(MANUAL)
+  bodyType           BodyType        @default(SEDAN)
+  mileage            Int             // In km
+  engineCapacity     Int?            // In cc
+  seatingCapacity    Int             @default(5)
+  color              String
+  description        String          @db.Text
+  registrationNumber String?
+  inventoryStatus    InventoryStatus @default(AVAILABLE)
+  isFeatured         Boolean         @default(false)
+  
+  images             VehicleImage[]
+  inquiries          VehicleInquiry[]
+  wishlistItems      WishlistItem[]
+
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  @@index([brand, model])
+  @@index([price])
+  @@index([inventoryStatus])
+  @@index([dealershipId])
+}
+
+model VehicleImage {
+  id        String   @id @default(uuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([vehicleId])
+}
+
+model VehicleInquiry {
+  id         String        @id @default(uuid())
+  vehicleId  String
+  vehicle    Vehicle       @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  customerId String?
+  customer   User?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  name       String
+  email      String
+  phone      String
+  message    String        @db.Text
+  status     InquiryStatus @default(PENDING)
+  notes      String?       @db.Text
+  
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+
+  @@index([vehicleId])
+  @@index([status])
+}
+
+model WishlistItem {
+  id         String   @id @default(uuid())
+  customerId String
+  customer   User     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  vehicleId  String
+  vehicle    Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([customerId, vehicleId])
+  @@index([customerId])
+}
+
+model ProductCategory {
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  description String?   @db.Text
+  image       String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([slug])
+}
+
+model Product {
+  id            String         @id @default(uuid())
+  categoryId    String
+  category      ProductCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  name          String
+  slug          String         @unique
+  description   String         @db.Text
+  brand         String
+  sku           String         @unique
+  price         Float
+  discountPrice Float?
+  stockQuantity Int            @default(0)
+  status        ProductStatus  @default(ACTIVE)
+  isFeatured    Boolean        @default(false)
+  specifications Json?         // Key-value pairs for technical specs
+  
+  images        ProductImage[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
+
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([categoryId])
+  @@index([brand])
+  @@index([status])
+}
+
+model ProductImage {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+}
+
+model Cart {
+  id         String     @id @default(uuid())
+  customerId String     @unique
+  customer   User       @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String   @id @default(uuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+  @@index([cartId])
+}
+
+model Order {
+  id             String        @id @default(uuid())
+  orderNumber    String        @unique
+  customerId     String
+  customer       User          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  
+  subtotal       Float
+  discount       Float         @default(0)
+  shipping       Float         @default(0)
+  total          Float
+  
+  orderStatus    OrderStatus   @default(PENDING)
+  paymentStatus  PaymentStatus @default(PENDING)
+  
+  shippingName   String
+  shippingAddress String
+  city           String
+  state          String
+  postalCode     String
+  phone          String
+  
+  items          OrderItem[]
+  payment        Payment?
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([customerId])
+  @@index([orderNumber])
+  @@index([orderStatus])
+}
+
+model OrderItem {
+  id           String   @id @default(uuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+  
+  productName  String
+  productPrice Float
+  quantity     Int
+  total        Float
+  createdAt    DateTime @default(now())
+
+  @@index([orderId])
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  orderId        String        @unique
+  order          Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  transactionRef String        @unique
+  method         PaymentMethod @default(CARD)
+  status         PaymentStatus @default(PENDING)
+  amount         Float
+  paidAt         DateTime?
+  gatewayResponse Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([transactionRef])
+}
+
+model ServiceCategory {
+  id              String               @id @default(uuid())
+  name            String
+  slug            String               @unique
+  description     String?              @db.Text
+  basePrice       Float
+  durationMinutes Int                  @default(60)
+  icon            String?
+  appointments    ServiceAppointment[]
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@index([slug])
+}
+
+model ServiceSlot {
+  id           String     @id @default(uuid())
+  dealershipId String
+  dealership   Dealership @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  dayOfWeek    Int        // 0 = Sunday, 1 = Monday, ...
+  startTime    String     // "09:00"
+  endTime      String     // "10:30"
+  maxCapacity  Int        @default(3)
+  isActive     Boolean    @default(true)
+
+  @@unique([dealershipId, dayOfWeek, startTime])
+  @@index([dealershipId])
+}
+
+model ServiceAppointment {
+  id                  String            @id @default(uuid())
+  appointmentNumber   String            @unique
+  customerId          String
+  customer            User              @relation("CustomerAppointments", fields: [customerId], references: [id], onDelete: Restrict)
+  dealershipId        String
+  dealership          Dealership        @relation(fields: [dealershipId], references: [id], onDelete: Cascade)
+  serviceCategoryId   String
+  serviceCategory     ServiceCategory   @relation(fields: [serviceCategoryId], references: [id], onDelete: Restrict)
+  
+  vehicleBrand        String
+  vehicleModel        String
+  vehicleRegistration String
+  
+  preferredDate       DateTime          @db.Date
+  preferredTimeSlot   String            // e.g. "09:00 - 10:30"
+  additionalNotes     String?           @db.Text
+  
+  status              AppointmentStatus @default(PENDING)
+  serviceNotes        String?           @db.Text
+  
+  serviceManagerId    String?
+  serviceManager      User?             @relation("ServiceManagerAssignments", fields: [serviceManagerId], references: [id], onDelete: SetNull)
+
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@index([dealershipId, preferredDate])
+  @@index([customerId])
+  @@index([status])
+  @@index([appointmentNumber])
+}
+
+model Review {
+  id         String           @id @default(uuid())
+  customerId String
+  customer   User             @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  targetType ReviewTargetType
+  targetId   String           // ID of Dealership, Product, or ServiceAppointment
+  rating     Int              // 1 to 5
+  reviewText String           @db.Text
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([targetType, targetId])
+  @@index([customerId])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // e.g. "VEHICLE_CREATED", "ORDER_PLACED", "APPOINTMENT_UPDATED"
+  entityType String   // "VEHICLE", "ORDER", "APPOINTMENT", "USER"
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+}
