@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node scripts/dev.js",
-    "dev:next": "next dev",
+    "dev": "next dev",
+    "db": "node scripts/db-service.js",
     "db:start": "node scripts/db-service.js",
     "build": "next build",
     "start": "next start",

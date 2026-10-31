@@ -19,9 +19,21 @@ if (!fs.existsSync(postgresBin)) {
   process.exit(1);
 }
 
-console.log('Starting local PostgreSQL server...');
+// Automatically remove stale lock file if left by abrupt shutdown
+const lockFile = path.join(pgDataDir, 'postmaster.pid');
+if (fs.existsSync(lockFile)) {
+  try {
+    fs.unlinkSync(lockFile);
+    console.log('Cleaned up stale postmaster.pid lock file.');
+  } catch (err) {
+    // Ignore if in use
+  }
+}
+
+console.log('Starting local PostgreSQL server on port 5432...');
 const child = spawn(postgresBin, ['-D', pgDataDir], {
   stdio: 'inherit',
+  windowsHide: true,
 });
 
 child.on('error', (err) => {
